@@ -4,6 +4,6 @@ require 'vendor/autoload.php';
 
 include('secret.php');
 
-$migrator = new \ebuildy\github2gitlab\Migrator($githubClient, $gitlabClient);
+$migrator = new \ebuildy\github2gitlab\Migrator($githubClient, $gitlabClient, $org);
 
-$migrator->run($org, true);
+$migrator->run(true);
