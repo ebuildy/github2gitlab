@@ -5,15 +5,6 @@ namespace ebuildy\github2gitlab\migrator;
 
 class TeamMigrator extends BaseMigrator
 {
-    private $usersMap;
-
-    public function setUsersMap($usersMap)
-    {
-        $this->usersMap = $usersMap;
-
-        return $this;
-    }
-
     public function run($dry = true)
     {
         $githubTeams    = $this->githubClient->organization()->teams()->all($this->organization);

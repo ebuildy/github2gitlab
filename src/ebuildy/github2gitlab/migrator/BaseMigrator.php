@@ -23,8 +23,15 @@ class BaseMigrator
 
 
     /**
-     * @param $githubClient
-     * @param $gitlabClient
+     * @var array
+     */
+    protected $usersMap;
+
+
+    /**
+     * @param \Github\Client $githubClient
+     * @param \Gitlab\Client $gitlabClient
+     * @param string $organization
      */
     public function __construct($githubClient, $gitlabClient, $organization)
     {
@@ -32,6 +39,13 @@ class BaseMigrator
         $this->gitlabClient = $gitlabClient;
 
         $this->organization = $organization;
+    }
+
+    public function setUsersMap($usersMap)
+    {
+        $this->usersMap = $usersMap;
+
+        return $this;
     }
 
     protected function output($message)

@@ -28,7 +28,7 @@ class ProjectMigrator extends BaseMigrator
 
             if (empty($existingGitlabProject))
             {
-                $this->output('[project] Create project "' . $githubProjectName . '""');
+                $this->output('[project] Create project "' . $githubProjectName . '"');
 
                 if (!$dry)
                 {
@@ -49,9 +49,9 @@ class ProjectMigrator extends BaseMigrator
 
             if ($existingGitlabProject['issues_enabled'])
             {
+                $issueMigrator = new IssueMigrator($this->githubClient, $this->gitlabClient, $this->organization, $existingGitlabProject, $this->usersMap);
 
-
-
+                $issueMigrator->run($dry);
             }
         }
     }

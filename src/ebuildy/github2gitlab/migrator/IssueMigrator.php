@@ -10,11 +10,6 @@ class IssueMigrator extends BaseMigrator
      */
     private $project;
 
-    /**
-     * @var array
-     */
-    private $usersMap;
-
     public function __construct($githubClient, $gitlabClient, $organization, $project, $userMap)
     {
         parent::__construct($githubClient, $gitlabClient, $organization);
@@ -52,7 +47,7 @@ class IssueMigrator extends BaseMigrator
 
                     if (!$dry)
                     {
-                        $gitlabMilestone = $this->gitlabClient->milestones->create($existingGitlabProject['id'],
+                        $gitlabMilestone = $this->gitlabClient->milestones->create($this->project['id'],
                             [
                                 'title'       => $githubProjectIssue['milestone']['title'],
                                 'description' => $githubProjectIssue['milestone']['description'],
@@ -78,7 +73,7 @@ class IssueMigrator extends BaseMigrator
 
             if (!$dry)
             {
-                $insertedGitlabIssue = $this->gitlabClient->issues->create($existingGitlabProject['id'], [
+                $insertedGitlabIssue = $this->gitlabClient->issues->create($this->project['id'], [
                     'title'         => $githubProjectIssue['title'],
                     'description'   => $githubProjectIssue['body'],
                     'assignee_id'   => $this->usersMap[$githubProjectIssue['assignee']['id']],
@@ -88,10 +83,17 @@ class IssueMigrator extends BaseMigrator
 
                 if ($githubProjectIssue['state'] !== 'open')
                 {
-                    $this->gitlabClient->issues->update($existingGitlabProject['id'], $insertedGitlabIssue['id'], [
+                    $this->gitlabClient->issues->update($this->project['id'], $insertedGitlabIssue['id'], [
                         'state_event' => 'close'
                     ]);
                 }
+            }
+
+            $githubIssueComments = $this->githubClient->issue()->comments()->all($this->organization, $this->project['name'], $githubProjectIssue['number'], 1, 1000);
+
+            foreach($githubIssueComments as $githubIssueComment)
+            {
+                $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
             }
         }
     }

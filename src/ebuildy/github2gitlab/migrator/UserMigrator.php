@@ -4,11 +4,6 @@ namespace ebuildy\github2gitlab\migrator;
 
 class UserMigrator extends BaseMigrator
 {
-    /**
-     * @var array
-     */
-    private $usersMap = [];
-
     public function getUsersMap()
     {
         return $this->usersMap;
