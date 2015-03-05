@@ -34,8 +34,8 @@ class UserMigrator extends BaseMigrator
 
                 if (!$dry)
                 {
-                    $gitlabUserId = $this->gitlabClient->users->create($githubMember['login'] . '@email.com',
-                        'password', [
+                    $gitlabUser = $this->gitlabClient->users->create($githubMember['login'] . '@email.com',
+                        DEFAULT_PASSWORD, [
                             'extern_uid'  => $githubMember['id'],
                             'name'        => $githubMember['login'],
                             'username'    => $githubMember['login'],
@@ -46,10 +46,26 @@ class UserMigrator extends BaseMigrator
             }
             else
             {
-                $gitlabUserId = $searchExistingUser['id'];
+                $gitlabUser = $searchExistingUser;
             }
 
-            $this->usersMap[$githubMember['id']] = $gitlabUserId;
+            $this->output('Login ' . $gitlabUser['username'] . ' ...');
+
+            sleep(10);
+
+            try
+            {
+                $session = $this->gitlabClient->users->login($gitlabUser['username'], DEFAULT_PASSWORD);
+
+                $gitlabUser['token'] = $session['private_token'];
+            }
+            catch (\Exception $e)
+            {
+                throw $e;
+                $this->output('<!> Cannot retrieve private_token for "' . $gitlabUser['username'] . '"' . $e->getMessage());die();
+            }
+
+            $this->usersMap[$githubMember['id']] = $gitlabUser;
         }
     }
 }

@@ -39,7 +39,7 @@ class TeamMigrator extends BaseMigrator
 
             foreach($githubMembers as $githubMember)
             {
-                $gitlabUserId  = $this->usersMap[$githubMember['id']];
+                $gitlabUserId  = $this->usersMap[$githubMember['id']]['id'];
 
                 $this->output('[Group] Add member ' . $gitlabUserId . ' to group ' . $githubTeam['name']);
 

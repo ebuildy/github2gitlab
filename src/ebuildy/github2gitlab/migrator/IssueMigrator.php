@@ -68,7 +68,7 @@ class IssueMigrator extends BaseMigrator
             }
 
             $labels = trim($labels, ',');
-
+var_dump($githubProjectIssue);die();
             $this->output("\t" . '[issue] Create "' . $githubProjectIssue['title'] . '""');
 
             if (!$dry)
@@ -76,7 +76,7 @@ class IssueMigrator extends BaseMigrator
                 $insertedGitlabIssue = $this->gitlabClient->issues->create($this->project['id'], [
                     'title'         => $githubProjectIssue['title'],
                     'description'   => $githubProjectIssue['body'],
-                    'assignee_id'   => $this->usersMap[$githubProjectIssue['assignee']['id']],
+                    'assignee_id'   => $this->usersMap[$githubProjectIssue['assignee']['id']]['id'],
                     'milestone_id'  => $gitlabMilestoneId,
                     'labels'        => $labels
                 ]);
