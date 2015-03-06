@@ -11,9 +11,11 @@ class Migrator extends BaseMigrator
 {
     public function run($dry = true)
     {
-        $userMigrator = new UserMigrator($this->githubClient, $this->gitlabClient, $this->organization);
+        $dic = DIC::getInstance();
 
-        $userMigrator->run($dry);
+        $dic->userMigrator = new UserMigrator($this->githubClient, $this->gitlabClient, $this->organization);
+
+        $dic->userMigrator->run($dry);
 
         $teamMigrator = new TeamMigrator($this->githubClient, $this->gitlabClient, $this->organization);
 
@@ -21,7 +23,7 @@ class Migrator extends BaseMigrator
 
         $projectMigrator    = new ProjectMigrator($this->githubClient, $this->gitlabClient, $this->organization);
 
-        $projectMigrator->setUsersMap($userMigrator->getUsersMap())->run($dry);
+        $projectMigrator->run($dry);
     }
 
 }

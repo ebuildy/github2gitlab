@@ -15,7 +15,7 @@ class ProjectMigrator extends BaseMigrator
             $existingGitlabProject = null;
 
             list($_org, $githubProjectName) = explode('/', str_replace('https://github.com/', '', $githubProject['html_url']));
-
+            
             foreach ($gitlabProjects as $gitlabProject)
             {
                 if ($gitlabProject['name'] === $githubProjectName)
@@ -51,7 +51,7 @@ class ProjectMigrator extends BaseMigrator
 
             foreach($githubProjectCollaborators as $githubProjectCollaborator)
             {
-                $gitlabUser = $this->usersMap[$githubProjectCollaborator['id']];
+                $gitlabUser = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectCollaborator, false);
 
                 $this->output("\t" . '[project] Add collaborator "' . $githubProjectCollaborator['login'] . '" to "' . $githubProjectName . '"');
 
@@ -63,14 +63,14 @@ class ProjectMigrator extends BaseMigrator
                     }
                     catch (\Exception $e)
                     {
-                        $this->output("\t" . "Already a project member", self::OUTPUT_ERROR);
+                        $this->output("\t" . "Already a project member " . $e->getMessage(), self::OUTPUT_ERROR);
                     }
                 }
             }
 
             if ($existingGitlabProject['issues_enabled'])
             {
-                $issueMigrator = new IssueMigrator($this->githubClient, $this->gitlabClient, $this->organization, $existingGitlabProject, $this->usersMap);
+                $issueMigrator = new IssueMigrator($this->githubClient, $this->gitlabClient, $this->organization, $existingGitlabProject);
 
                 $issueMigrator->run($dry);
             }

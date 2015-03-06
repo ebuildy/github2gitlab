@@ -2,6 +2,8 @@
 
 namespace ebuildy\github2gitlab\migrator;
 
+use ebuildy\github2gitlab\DIC;
+
 class BaseMigrator
 {
     /**
@@ -21,11 +23,10 @@ class BaseMigrator
      */
     public $organization;
 
-
     /**
-     * @var array
+     * @var DIC
      */
-    protected $usersMap;
+    public $dic;
 
 
     /**
@@ -39,13 +40,8 @@ class BaseMigrator
         $this->gitlabClient = $gitlabClient;
 
         $this->organization = $organization;
-    }
 
-    public function setUsersMap($usersMap)
-    {
-        $this->usersMap = $usersMap;
-
-        return $this;
+        $this->dic = DIC::getInstance();
     }
 
     const OUTPUT_ERROR = 'error';
@@ -60,18 +56,16 @@ class BaseMigrator
                 echo date("H:i") . ' > ';
             }
 
-            if ($type === OUTPUT_ERROR)
+            if ($type === self::OUTPUT_ERROR)
             {
-                echo "\033[43m";
+                $message = "\033[31m" . $message;
             }
-            elseif ($type === OUTPUT_SUCCESS)
+            elseif ($type === self::OUTPUT_SUCCESS)
             {
-                echo "\033[42m";
+                $message = "\033[36m" . $message;
             }
 
-            echo $message;
-
-            echo "\033[0m";
+            echo $message . "\033[0m";
         }
 
         echo PHP_EOL;

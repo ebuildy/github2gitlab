@@ -10,12 +10,11 @@ class IssueMigrator extends BaseMigrator
      */
     private $project;
 
-    public function __construct($githubClient, $gitlabClient, $organization, $project, $userMap)
+    public function __construct($githubClient, $gitlabClient, $organization, $project)
     {
         parent::__construct($githubClient, $gitlabClient, $organization);
 
         $this->project  = $project;
-        $this->usersMap = $userMap;
     }
 
     public function run($dry = true)
@@ -66,7 +65,7 @@ class IssueMigrator extends BaseMigrator
 
             foreach($githubProjectIssue['labels'] as $githubLabel)
             {
-                $labels .= $githubLabel['title'] . ',';
+                $labels .= $githubLabel['name'] . ',';
             }
 
             $labels = trim($labels, ',');
@@ -75,7 +74,8 @@ class IssueMigrator extends BaseMigrator
 
             if (!$dry)
             {
-                $gitlabAuthor           = $this->usersMap[$githubProjectIssue['user']['id']];
+                $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['user']);
+                $gitlabAssignee         = empty($githubProjectIssue['assignee']) ? null : $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['assignee']);
                 $insertedGitlabIssue    = null;
 
                 $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
@@ -87,14 +87,16 @@ class IssueMigrator extends BaseMigrator
                         $insertedGitlabIssue = $this->gitlabClient->issues->create($this->project['id'], [
                             'title'        => $githubProjectIssue['title'],
                             'description'  => $githubProjectIssue['body'],
-                            'assignee_id'  => $this->usersMap[$githubProjectIssue['assignee']['id']]['id'],
+                            'assignee_id'  => empty($gitlabAssignee) ? null : $gitlabAssignee['id'],
                             'milestone_id' => $gitlabMilestoneId,
                             'labels'       => $labels
                         ]);
+
+                        $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
                     }
                     catch (\Exception $e)
                     {
-                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue!', self::OUTPUT_ERROR);
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, trying as admin...', self::OUTPUT_ERROR);
 
                         $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
                     }
@@ -102,21 +104,66 @@ class IssueMigrator extends BaseMigrator
 
                 if ($githubProjectIssue['state'] !== 'open')
                 {
-                    $this->gitlabClient->issues->update($this->project['id'], $insertedGitlabIssue['id'], [
-                        'state_event' => 'close'
-                    ]);
+                    while(true)
+                    {
+                        try
+                        {
+                            $this->output("\t" . 'Closing issue');
+
+                            $this->gitlabClient->issues->update($this->project['id'], $insertedGitlabIssue['id'], [
+                                'state_event' => 'close'
+                            ]);
+
+                            $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
+
+                            break;
+                        }
+                        catch (\Exception $e)
+                        {
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, trying as admin...', self::OUTPUT_ERROR);
+
+                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
+                            sleep(1);
+                        }
+                    }
                 }
             }
+
+            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
 
             $githubIssueComments = $this->githubClient->issue()->comments()->all($this->organization, $this->project['name'], $githubProjectIssue['number'], 1, 1000);
 
             foreach($githubIssueComments as $githubIssueComment)
             {
-                $gitlabAuthor = $this->usersMap[$githubIssueComment['user']['id']];
+                $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
 
                 $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
 
-                $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
+                $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
+
+                if (!$dry)
+                {
+                    while(true)
+                    {
+                        try
+                        {
+                            $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
+
+                            $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
+
+                            break;
+                        }
+                        catch (\Exception $e)
+                        {
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot create comment, trying as admin...', self::OUTPUT_ERROR);
+
+                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
+                            sleep(1);
+                        }
+                    }
+                }
             }
         }
 

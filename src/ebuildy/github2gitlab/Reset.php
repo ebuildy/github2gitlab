@@ -10,7 +10,7 @@ class Reset extends BaseMigrator
     {
         $this->projects();
 
-        $this->users();
+        //$this->users();
     }
 
     private function users()
@@ -21,7 +21,7 @@ class Reset extends BaseMigrator
         {
             if ($user['name'] !== 'Administrator')
             {
-                $this->output('Remove user "' . $user['name'] . '"');
+                $this->output('Remove user "' . $user['name'] . '"', self::OUTPUT_ERROR);
 
                 $this->gitlabClient->users->remove($user['id']);
             }
@@ -34,7 +34,14 @@ class Reset extends BaseMigrator
 
         foreach($projects as $project)
         {
-            $this->output('Remove project "' . $project['name'] . '"');
+            $this->output('Remove project "' . $project['name'] . '"', self::OUTPUT_ERROR);
+
+            $members = $this->gitlabClient->projects->members($project['id']);
+
+            foreach($members as $member)
+            {
+                $this->gitlabClient->projects->removeMember($project['id'], $member['id']);
+            }
 
             $this->gitlabClient->projects->remove($project['id']);
         }
