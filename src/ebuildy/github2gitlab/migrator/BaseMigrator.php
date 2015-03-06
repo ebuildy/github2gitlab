@@ -48,8 +48,32 @@ class BaseMigrator
         return $this;
     }
 
-    protected function output($message)
+    const OUTPUT_ERROR = 'error';
+    const OUTPUT_SUCCESS = 'success';
+
+    protected function output($message, $type = null)
     {
-        echo $message . PHP_EOL;
+        if (!empty($message))
+        {
+            if ($message[0] !== "\t")
+            {
+                echo date("H:i") . ' > ';
+            }
+
+            if ($type === OUTPUT_ERROR)
+            {
+                echo "\033[43m";
+            }
+            elseif ($type === OUTPUT_SUCCESS)
+            {
+                echo "\033[42m";
+            }
+
+            echo $message;
+
+            echo "\033[0m";
+        }
+
+        echo PHP_EOL;
     }
 }

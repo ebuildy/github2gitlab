@@ -51,18 +51,22 @@ class UserMigrator extends BaseMigrator
 
             $this->output('Login ' . $gitlabUser['username'] . ' ...');
 
-            sleep(10);
-
-            try
+            while(true)
             {
-                $session = $this->gitlabClient->users->login($gitlabUser['username'], DEFAULT_PASSWORD);
+                try
+                {
+                    $session = $this->gitlabClient->users->login($gitlabUser['username'], DEFAULT_PASSWORD);
 
-                $gitlabUser['token'] = $session['private_token'];
-            }
-            catch (\Exception $e)
-            {
-                throw $e;
-                $this->output('<!> Cannot retrieve private_token for "' . $gitlabUser['username'] . '"' . $e->getMessage());die();
+                    $gitlabUser['token'] = $session['private_token'];
+
+                    break;
+                }
+                catch (\Exception $e)
+                {
+                    $this->output('<!> ' . $e->getMessage() . ', wait 20 secondes...');
+
+                    sleep(20);
+                }
             }
 
             $this->usersMap[$githubMember['id']] = $gitlabUser;

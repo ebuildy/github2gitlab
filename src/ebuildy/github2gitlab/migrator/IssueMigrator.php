@@ -43,10 +43,12 @@ class IssueMigrator extends BaseMigrator
 
                 if (empty($gitlabMilestone))
                 {
-                    $this->output("\t" . '[milestone] Create "' . $githubProjectIssue['milestone']['title'] . '""');
+                    $this->output("\t" . '[milestone] Create "' . $githubProjectIssue['milestone']['title'] . '"', self::OUTPUT_SUCCESS);
 
                     if (!$dry)
                     {
+                        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
                         $gitlabMilestone = $this->gitlabClient->milestones->create($this->project['id'],
                             [
                                 'title'       => $githubProjectIssue['milestone']['title'],
@@ -68,18 +70,35 @@ class IssueMigrator extends BaseMigrator
             }
 
             $labels = trim($labels, ',');
-var_dump($githubProjectIssue);die();
-            $this->output("\t" . '[issue] Create "' . $githubProjectIssue['title'] . '""');
+//var_dump($githubProjectIssue);die();
+            $this->output("\t" . '[issue] Create "' . $githubProjectIssue['title'] . '"');
 
             if (!$dry)
             {
-                $insertedGitlabIssue = $this->gitlabClient->issues->create($this->project['id'], [
-                    'title'         => $githubProjectIssue['title'],
-                    'description'   => $githubProjectIssue['body'],
-                    'assignee_id'   => $this->usersMap[$githubProjectIssue['assignee']['id']]['id'],
-                    'milestone_id'  => $gitlabMilestoneId,
-                    'labels'        => $labels
-                ]);
+                $gitlabAuthor           = $this->usersMap[$githubProjectIssue['user']['id']];
+                $insertedGitlabIssue    = null;
+
+                $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
+                while(empty($insertedGitlabIssue))
+                {
+                    try
+                    {
+                        $insertedGitlabIssue = $this->gitlabClient->issues->create($this->project['id'], [
+                            'title'        => $githubProjectIssue['title'],
+                            'description'  => $githubProjectIssue['body'],
+                            'assignee_id'  => $this->usersMap[$githubProjectIssue['assignee']['id']]['id'],
+                            'milestone_id' => $gitlabMilestoneId,
+                            'labels'       => $labels
+                        ]);
+                    }
+                    catch (\Exception $e)
+                    {
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue!', self::OUTPUT_ERROR);
+
+                        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                    }
+                }
 
                 if ($githubProjectIssue['state'] !== 'open')
                 {
@@ -93,9 +112,15 @@ var_dump($githubProjectIssue);die();
 
             foreach($githubIssueComments as $githubIssueComment)
             {
+                $gitlabAuthor = $this->usersMap[$githubIssueComment['user']['id']];
+
+                $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
                 $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
             }
         }
+
+        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
     }
 
     static public function resolveMilestoneState($githubState)

@@ -8,7 +8,7 @@ class Reset extends BaseMigrator
 {
     public function run()
     {
-        //$this->projects();
+        $this->projects();
 
         $this->users();
     }
