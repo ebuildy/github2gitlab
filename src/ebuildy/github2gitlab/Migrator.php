@@ -19,7 +19,7 @@ class Migrator extends BaseMigrator
 
         $teamMigrator = new TeamMigrator($this->githubClient, $this->gitlabClient, $this->organization);
 
-        //$teamMigrator->setUsersMap($userMigrator->getUsersMap())->run($dry);
+        $teamMigrator->run($dry);
 
         $projectMigrator    = new ProjectMigrator($this->githubClient, $this->gitlabClient, $this->organization);
 
