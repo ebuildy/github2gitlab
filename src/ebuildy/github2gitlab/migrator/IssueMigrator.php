@@ -19,46 +19,37 @@ class IssueMigrator extends BaseMigrator
 
     public function run($dry = true)
     {
-        $githubProjectIssues    = $this->githubClient->issues()->all($this->organization, $this->project['name']);
-        $gitlabMilestones       = $this->gitlabClient->milestones->all($this->project['id'], 100);
+        $this->dry = $dry;
+
+        $page = 1;
+
+        $githubProjectIssues = array();
+
+        do
+        {
+            $buffer = $this->githubClient->issues()->all($this->organization, $this->project['name'], [
+                'state' => 'all',
+                'page'  => $page++
+            ]);
+
+            $githubProjectIssues = array_merge($githubProjectIssues, $buffer);
+        }
+        while (count($buffer) > 0);
+
+        $this->output("\t" . "Found " . count($githubProjectIssues) . " issues");
 
         foreach($githubProjectIssues as $githubProjectIssue)
         {
+            if (isset($githubProjectIssue['pull_request']) && empty($githubProjectIssue['pull_request']))
+            {
+                continue;
+            }
+
             $gitlabMilestoneId = null;
 
             if ($githubProjectIssue['milestone'] !== null)
             {
-                $gitlabMilestone = null;
-
-                foreach($gitlabMilestones as $_gitlabMilestone)
-                {
-                    if ($_gitlabMilestone['title'] === $githubProjectIssue['milestone']['title'])
-                    {
-                        $gitlabMilestone = $_gitlabMilestone;
-
-                        break;
-                    }
-                }
-
-                if (empty($gitlabMilestone))
-                {
-                    $this->output("\t" . '[milestone] Create "' . $githubProjectIssue['milestone']['title'] . '"', self::OUTPUT_SUCCESS);
-
-                    if (!$dry)
-                    {
-                        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-
-                        $gitlabMilestone = $this->gitlabClient->milestones->create($this->project['id'],
-                            [
-                                'title'       => $githubProjectIssue['milestone']['title'],
-                                'description' => $githubProjectIssue['milestone']['description'],
-                                'state'       => self::resolveMilestoneState($githubProjectIssue['milestone']['state']),
-                                'due_date'    => $githubProjectIssue['milestone']['due_on']
-                            ]);
-                    }
-                }
-
-                $gitlabMilestoneId = $gitlabMilestone['id'];
+                $gitlabMilestoneId = $this->createMilestone($githubProjectIssue['milestone'], $this->project);
             }
 
             $labels = '';
@@ -69,18 +60,18 @@ class IssueMigrator extends BaseMigrator
             }
 
             $labels = trim($labels, ',');
-//var_dump($githubProjectIssue);die();
+
             $this->output("\t" . '[issue] Create "' . $githubProjectIssue['title'] . '"');
 
             if (!$dry)
             {
-                $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['user']);
-                $gitlabAssignee         = empty($githubProjectIssue['assignee']) ? null : $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['assignee']);
-                $insertedGitlabIssue    = null;
+                $gitlabAuthor = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['user']);
+                $gitlabAssignee = empty($githubProjectIssue['assignee']) ? null : $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['assignee']);
+                $insertedGitlabIssue = null;
 
                 $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
 
-                while(empty($insertedGitlabIssue))
+                while (empty($insertedGitlabIssue))
                 {
                     try
                     {
@@ -96,7 +87,8 @@ class IssueMigrator extends BaseMigrator
                     }
                     catch (\Exception $e)
                     {
-                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, adding ' . $gitlabAuthor['name'] . ' as a project member',
+                            self::OUTPUT_ERROR);
 
                         try
                         {
@@ -104,7 +96,8 @@ class IssueMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
+                            $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
+                                self::OUTPUT_ERROR);
 
                             $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
                         }
@@ -113,7 +106,7 @@ class IssueMigrator extends BaseMigrator
 
                 if ($githubProjectIssue['state'] !== 'open')
                 {
-                    while(true)
+                    while (true)
                     {
                         try
                         {
@@ -129,7 +122,8 @@ class IssueMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, adding ' . $gitlabAuthor['name'] . ' as a project member',
+                                self::OUTPUT_ERROR);
 
                             try
                             {
@@ -137,9 +131,11 @@ class IssueMigrator extends BaseMigrator
                             }
                             catch (\Exception $e)
                             {
-                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
+                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
+                                    self::OUTPUT_ERROR);
 
-                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN,
+                                    \Gitlab\Client::AUTH_URL_TOKEN);
                             }
                         }
                     }
@@ -200,15 +196,5 @@ class IssueMigrator extends BaseMigrator
         $this->gitlabClient->projects->addMember($this->project['id'], $user['id'], 30);
 
         $this->gitlabClient->authenticate($user['token'], \Gitlab\Client::AUTH_URL_TOKEN);
-    }
-
-    static public function resolveMilestoneState($githubState)
-    {
-        if ($githubState === 'open')
-        {
-            return 'active';
-        }
-
-        return 'close';
     }
 }

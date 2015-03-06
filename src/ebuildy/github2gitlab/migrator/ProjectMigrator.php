@@ -16,6 +16,8 @@ class ProjectMigrator extends BaseMigrator
 
             list($_org, $githubProjectName) = explode('/', str_replace('https://github.com/', '', $githubProject['html_url']));
 
+            if ($githubProjectName !== 'qwant') continue;
+
             foreach ($gitlabProjects as $gitlabProject)
             {
                 if ($gitlabProject['name'] === $githubProjectName)
@@ -74,6 +76,10 @@ class ProjectMigrator extends BaseMigrator
 
                 $issueMigrator->run($dry);
             }
+
+            $issueMigrator = new PRMigrator($this->githubClient, $this->gitlabClient, $this->organization, $existingGitlabProject);
+
+           // $issueMigrator->run($dry);
         }
     }
 

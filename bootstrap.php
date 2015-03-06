@@ -26,7 +26,7 @@ $githubClient->authenticate(GITHUB_TOKEN, null, \Github\Client::AUTH_URL_TOKEN);
  */
 $reset = new \ebuildy\github2gitlab\Reset(null, $gitlabClient, $org);
 
-$reset->run();
+//$reset->run();
 
 
 /**

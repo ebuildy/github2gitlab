@@ -30,6 +30,17 @@ class BaseMigrator
 
 
     /**
+     * @var bool
+     */
+    protected $dry = true;
+
+    /**
+     * @var array
+     */
+    protected $gitlabMilestones = null;
+
+
+    /**
      * @param \Github\Client $githubClient
      * @param \Gitlab\Client $gitlabClient
      * @param string $organization
@@ -69,5 +80,55 @@ class BaseMigrator
         }
 
         echo PHP_EOL;
+    }
+
+    protected function createMilestone($githubMilestone, $project)
+    {
+        $gitlabMilestone = null;
+
+        if ($this->gitlabMilestones === null)
+        {
+            $this->gitlabMilestones = $this->gitlabClient->milestones->all($project['id'], 100);
+        }
+
+        foreach($this->gitlabMilestones as $_gitlabMilestone)
+        {
+            if ($_gitlabMilestone['title'] === $githubMilestone['title'])
+            {
+                $gitlabMilestone = $_gitlabMilestone;
+
+                break;
+            }
+        }
+
+        if (empty($gitlabMilestone))
+        {
+            $this->output("\t" . '[milestone] Create "' . $githubMilestone['title'] . '"', self::OUTPUT_SUCCESS);
+
+            if (!$this->dry)
+            {
+                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
+                $gitlabMilestone = $this->gitlabClient->milestones->create($project['id'],
+                    [
+                        'title'       => $githubMilestone['title'],
+                        'description' => $githubMilestone['description'],
+                        'state'       => self::resolveMilestoneState($githubMilestone['state']),
+                        'due_date'    => $githubMilestone['due_on']
+                    ]);
+            }
+        }
+
+        return $gitlabMilestone['id'];
+    }
+
+    static public function resolveMilestoneState($githubState)
+    {
+        if ($githubState === 'open')
+        {
+            return 'active';
+        }
+
+        return 'close';
     }
 }
