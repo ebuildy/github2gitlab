@@ -1,0 +1,13 @@
+Import Github project to Gitlab Gitlab has a native plugin to import a Github repository, but it’s very basic. I wrote a real script that import every things from Github to Gitlab:
+
+Members
+Teams ==> Gitlab groups
+Labels
+Milestones
+Issues with issues comments
+
+Author are respected between Github and Gitlab.
+
+Technologies involved Php
+Composer for Gitlab and Github API SDK
+Gitlab and Github API

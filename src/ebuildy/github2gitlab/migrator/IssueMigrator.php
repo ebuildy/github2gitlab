@@ -96,9 +96,18 @@ class IssueMigrator extends BaseMigrator
                     }
                     catch (\Exception $e)
                     {
-                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, trying as admin...', self::OUTPUT_ERROR);
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
 
-                        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                        try
+                        {
+                            $this->addProjectMember($gitlabAuthor);
+                        }
+                        catch (\Exception $e)
+                        {
+                            $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
+
+                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                        }
                     }
                 }
 
@@ -120,11 +129,18 @@ class IssueMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, trying as admin...', self::OUTPUT_ERROR);
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
 
-                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                            try
+                            {
+                                $this->addProjectMember($gitlabAuthor);
+                            }
+                            catch (\Exception $e)
+                            {
+                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
 
-                            sleep(1);
+                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                            }
                         }
                     }
                 }
@@ -138,12 +154,12 @@ class IssueMigrator extends BaseMigrator
             {
                 $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
 
-                $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
-
                 $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
 
                 if (!$dry)
                 {
+                    $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
                     while(true)
                     {
                         try
@@ -156,11 +172,18 @@ class IssueMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot create comment, trying as admin...', self::OUTPUT_ERROR);
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot comment issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
 
-                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                            try
+                            {
+                                $this->addProjectMember($gitlabAuthor);
+                            }
+                            catch (\Exception $e)
+                            {
+                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
 
-                            sleep(1);
+                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+                            }
                         }
                     }
                 }
@@ -168,6 +191,15 @@ class IssueMigrator extends BaseMigrator
         }
 
         $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+    }
+
+    private function addProjectMember($user)
+    {
+        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
+        $this->gitlabClient->projects->addMember($this->project['id'], $user['id'], 30);
+
+        $this->gitlabClient->authenticate($user['token'], \Gitlab\Client::AUTH_URL_TOKEN);
     }
 
     static public function resolveMilestoneState($githubState)

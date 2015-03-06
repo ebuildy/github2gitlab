@@ -15,7 +15,7 @@ class ProjectMigrator extends BaseMigrator
             $existingGitlabProject = null;
 
             list($_org, $githubProjectName) = explode('/', str_replace('https://github.com/', '', $githubProject['html_url']));
-            
+
             foreach ($gitlabProjects as $gitlabProject)
             {
                 if ($gitlabProject['name'] === $githubProjectName)
