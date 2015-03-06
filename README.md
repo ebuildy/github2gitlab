@@ -3,7 +3,7 @@ Import Github project to Gitlab Gitlab has a native plugin to import a Github re
 ### Features
 
 - [x] Members
-- [ ] Members email (need to parse .git/logs/HEAD)
+- [ ] Members email (need to parse "git shortlog -s -n -e")
 - [x] Teams ==> Gitlab groups
 - [x] Labels
 - [x] Milestones
