@@ -3,15 +3,15 @@ Import Github project to Gitlab Gitlab has a native plugin to import a Github re
 ### Features
 
 - [x] Members
-- [ ] Members email (need to parse "git shortlog -s -n -e")
+- [ ] Members email (you can manually parse "git shortlog -s -n -e")
 - [x] Teams ==> Gitlab groups
 - [x] Labels
 - [x] Milestones
 - [x] Projects
 - [x] Issues
 - [x] Issues comments
-- [ ] Issues date (Gitlab API doesnot offer to specify dates)
-- [ ] Pull Request ==> Gitlab merge request
+- [x] Issues date (via a SQL file to execute on the MySQL or Postgres server)
+- [x] Pull Request ==> Gitlab merge request
 
 ### How to use it
 
@@ -49,8 +49,9 @@ Send a POST curl like this:
 
 Here you can copy/paste the private_token!
 
-### Technologies involved Php
+### Technologies involved
 
-- Php (yes I know...)
+- Php (at least 5.5)
 - Composer for Gitlab and Github API SDK
-- Gitlab and Github API
+- Gitlab and Github HTTP API
+- SQL files
