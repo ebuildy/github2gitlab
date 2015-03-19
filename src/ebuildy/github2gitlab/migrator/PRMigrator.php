@@ -10,9 +10,9 @@ class PRMigrator extends BaseMigrator
      */
     private $project;
 
-    public function __construct($githubClient, $gitlabClient, $organization, $project)
+    public function __construct($project)
     {
-        parent::__construct($githubClient, $gitlabClient, $organization);
+        parent::__construct();
 
         $this->project  = $project;
     }
@@ -58,7 +58,7 @@ class PRMigrator extends BaseMigrator
                                 $githubProjectIssue['base']['ref'],
                                 $githubProjectIssue['title'],
                                 empty($gitlabAssignee) ? null : $gitlabAssignee['id'],
-                                '',
+                                $this->project['id'],
                                 $githubProjectIssue['body']
                             );
 
@@ -66,8 +66,13 @@ class PRMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, adding ' . $gitlabAuthor['name'] . ' as a project member',
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot create MR, adding ' . $gitlabAuthor['name'] . ' as a project member',
                                 self::OUTPUT_ERROR);
+
+                            if (strpos($e->getMessage(), 'This merge request already exists') !== false)
+                            {
+                                break;
+                            }
 
                             try
                             {
@@ -149,7 +154,12 @@ class PRMigrator extends BaseMigrator
                         }
                         catch (\Exception $e)
                         {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot comment issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+                            $this->output("\t" . '"' . $e->getMessage() . '" cannot comment MR, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+
+                            if (strpos($e->getMessage(), 'SSLRead') !== false)
+                            {
+                                break;
+                            }
 
                             try
                             {

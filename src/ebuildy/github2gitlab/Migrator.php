@@ -13,17 +13,25 @@ class Migrator extends BaseMigrator
     {
         $dic = DIC::getInstance();
 
-        $dic->userMigrator = new UserMigrator($this->githubClient, $this->gitlabClient, $this->organization);
+        $dic->userMigrator = new UserMigrator();
 
         $dic->userMigrator->run($dry);
 
-        $teamMigrator = new TeamMigrator($this->githubClient, $this->gitlabClient, $this->organization);
+        $teamMigrator = new TeamMigrator();
 
-        $teamMigrator->run($dry);
+      // $teamMigrator->run($dry);
 
-        $projectMigrator    = new ProjectMigrator($this->githubClient, $this->gitlabClient, $this->organization);
+        $projectMigrator = new ProjectMigrator();
 
-        $projectMigrator->run($dry);
+        foreach($projectMigrator->getGithubProjects() as $githubProject)
+        {
+            list($_org, $githubProjectName) = explode('/', str_replace('https://github.com/', '', $githubProject['html_url']));
+
+            if ($githubProjectName !== 'admin')
+            {
+                $projectMigrator->importProject($githubProject, $dry);
+            }
+        }
     }
 
 }

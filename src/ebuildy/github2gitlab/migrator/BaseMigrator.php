@@ -40,19 +40,14 @@ class BaseMigrator
     protected $gitlabMilestones = null;
 
 
-    /**
-     * @param \Github\Client $githubClient
-     * @param \Gitlab\Client $gitlabClient
-     * @param string $organization
-     */
-    public function __construct($githubClient, $gitlabClient, $organization)
+    public function __construct()
     {
-        $this->githubClient = $githubClient;
-        $this->gitlabClient = $gitlabClient;
-
-        $this->organization = $organization;
-
         $this->dic = DIC::getInstance();
+
+        $this->githubClient = $this->dic->githubClient;
+        $this->gitlabClient = $this->dic->gitlabClient;
+
+        $this->organization = $this->dic->organization;
     }
 
     const OUTPUT_ERROR = 'error';

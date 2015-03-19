@@ -13,7 +13,7 @@ class UserMigrator extends BaseMigrator
     /**
      * @var array
      */
-    protected $gitlabUsers;
+    protected $gitlabUsers = [];
 
 
     /**
@@ -48,6 +48,8 @@ class UserMigrator extends BaseMigrator
         // 2. Else create user
         if (!isset($this->usersMap[$githubUserId]))
         {
+            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
             $this->output('[User] Insert ' . $githubUser['login'], self::OUTPUT_SUCCESS);
 
             $this->usersMap[$githubUserId] = $this->gitlabClient->users->create($githubUser['login'] . '@email.com',

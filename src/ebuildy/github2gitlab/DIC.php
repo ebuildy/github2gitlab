@@ -12,6 +12,28 @@ class DIC
      */
     public $userMigrator;
 
+    /**
+     * @var \Github\Client
+     */
+    public $githubClient;
+
+    /**
+     * @var \Gitlab\Client
+     */
+    public $gitlabClient;
+
+    /**
+     * @var String
+     */
+    public $organization;
+
+    public function init($githubClient, $gitlabClient, $organisation)
+    {
+        $this->gitlabClient = $gitlabClient;
+        $this->githubClient = $githubClient;
+        $this->organization = $organisation;
+    }
+
     static private $instance;
 
     static public function getInstance()

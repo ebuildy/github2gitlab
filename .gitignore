@@ -2,4 +2,6 @@
 vendor
 composer.lock
 secret.php
+sql/*
+!sql/README.md
 

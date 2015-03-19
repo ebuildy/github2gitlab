@@ -10,9 +10,9 @@ class IssueMigrator extends BaseMigrator
      */
     private $project;
 
-    public function __construct($githubClient, $gitlabClient, $organization, $project)
+    public function __construct($project)
     {
-        parent::__construct($githubClient, $gitlabClient, $organization);
+        parent::__construct();
 
         $this->project  = $project;
     }
@@ -23,7 +23,7 @@ class IssueMigrator extends BaseMigrator
 
         $page = 1;
 
-        $githubProjectIssues = array();
+        $githubProjectIssues = [];
 
         do
         {
@@ -38,6 +38,13 @@ class IssueMigrator extends BaseMigrator
 
         $this->output("\t" . "Found " . count($githubProjectIssues) . " issues");
 
+        usort($githubProjectIssues, function($a, $b)
+        {
+            return $a['id'] - $b['id'];
+        });
+
+        $sqlUpdateIssues = '';
+
         foreach($githubProjectIssues as $githubProjectIssue)
         {
             if (isset($githubProjectIssue['pull_request']) && empty($githubProjectIssue['pull_request']))
@@ -45,21 +52,27 @@ class IssueMigrator extends BaseMigrator
                 continue;
             }
 
-            $gitlabMilestoneId = null;
+            /**
+             * Milestone
+             */
+                $gitlabMilestoneId = null;
 
-            if ($githubProjectIssue['milestone'] !== null)
-            {
-                $gitlabMilestoneId = $this->createMilestone($githubProjectIssue['milestone'], $this->project);
-            }
+                if ($githubProjectIssue['milestone'] !== null)
+                {
+                    $gitlabMilestoneId = $this->createMilestone($githubProjectIssue['milestone'], $this->project);
+                }
 
-            $labels = '';
+            /**
+             * Labels
+             */
+                $labels = '';
 
-            foreach($githubProjectIssue['labels'] as $githubLabel)
-            {
-                $labels .= $githubLabel['name'] . ',';
-            }
+                foreach($githubProjectIssue['labels'] as $githubLabel)
+                {
+                    $labels .= $githubLabel['name'] . ',';
+                }
 
-            $labels = trim($labels, ',');
+                $labels = trim($labels, ',');
 
             $this->output("\t" . '[issue] Create "' . $githubProjectIssue['title'] . '"');
 
@@ -82,6 +95,16 @@ class IssueMigrator extends BaseMigrator
                             'milestone_id' => $gitlabMilestoneId,
                             'labels'       => $labels
                         ]);
+
+                        /**
+                         * Date time
+                         */
+                        $dateCreated = $githubProjectIssue['created_at'];
+                        $dateUpdated = $githubProjectIssue['updated_at'];
+
+                        $sqlUpdateIssues .= 'UPDATE issues SET created_at = \'' . $dateCreated . '\', updated_at = \'' . $dateUpdated . '\' ' .
+                            'WHERE id = ' . $insertedGitlabIssue['id'] . ';' .
+                            PHP_EOL;
 
                         $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
                     }
@@ -160,7 +183,17 @@ class IssueMigrator extends BaseMigrator
                     {
                         try
                         {
-                            $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
+                            $insertedGitlabNote = $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
+
+                            /**
+                             * Date time
+                             */
+                            $dateCreated = $githubIssueComment['created_at'];
+                            $dateUpdated = $githubIssueComment['updated_at'];
+
+                            $sqlUpdateIssues .= 'UPDATE notes SET created_at = \'' . $dateCreated . '\', updated_at = \'' . $dateUpdated . '\' ' .
+                                'WHERE id = ' . $insertedGitlabNote['id'] . ';' .
+                                PHP_EOL;
 
                             $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
 
@@ -185,6 +218,8 @@ class IssueMigrator extends BaseMigrator
                 }
             }
         }
+
+        file_put_contents(ROOT . '/sql/update-issues-' . $this->project['id'] . '.sql', $sqlUpdateIssues);
 
         $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
     }
