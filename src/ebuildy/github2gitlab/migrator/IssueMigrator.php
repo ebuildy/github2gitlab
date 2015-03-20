@@ -3,20 +3,8 @@
 namespace ebuildy\github2gitlab\migrator;
 
 
-class IssueMigrator extends BaseMigrator
+class ProjectAwareMigrator extends BaseProjectAwareMigrator
 {
-    /**
-     * @var array
-     */
-    private $project;
-
-    public function __construct($project)
-    {
-        parent::__construct();
-
-        $this->project  = $project;
-    }
-
     public function run($dry = true)
     {
         $this->dry = $dry;
@@ -113,17 +101,7 @@ class IssueMigrator extends BaseMigrator
                         $this->output("\t" . '"' . $e->getMessage() . '" cannot create issue, adding ' . $gitlabAuthor['name'] . ' as a project member',
                             self::OUTPUT_ERROR);
 
-                        try
-                        {
-                            $this->addProjectMember($gitlabAuthor);
-                        }
-                        catch (\Exception $e)
-                        {
-                            $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
-                                self::OUTPUT_ERROR);
-
-                            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-                        }
+                        $this->addProjectMember($gitlabAuthor);
                     }
                 }
 
@@ -148,75 +126,13 @@ class IssueMigrator extends BaseMigrator
                             $this->output("\t" . '"' . $e->getMessage() . '" cannot update issue, adding ' . $gitlabAuthor['name'] . ' as a project member',
                                 self::OUTPUT_ERROR);
 
-                            try
-                            {
-                                $this->addProjectMember($gitlabAuthor);
-                            }
-                            catch (\Exception $e)
-                            {
-                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
-                                    self::OUTPUT_ERROR);
-
-                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN,
-                                    \Gitlab\Client::AUTH_URL_TOKEN);
-                            }
+                            $this->addProjectMember($gitlabAuthor);
                         }
                     }
                 }
             }
 
-            $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
 
-            $githubIssueComments = $this->githubClient->issue()->comments()->all($this->organization, $this->project['name'], $githubProjectIssue['number'], 1, 1000);
-
-            foreach($githubIssueComments as $githubIssueComment)
-            {
-                $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
-
-                $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
-
-                if (!$dry)
-                {
-                    $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
-
-                    while(true)
-                    {
-                        try
-                        {
-                            $insertedGitlabNote = $this->gitlabClient->issues->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
-
-                            /**
-                             * Date time
-                             */
-                            $dateCreated = $githubIssueComment['created_at'];
-                            $dateUpdated = $githubIssueComment['updated_at'];
-
-                            $sqlUpdateIssues .= 'UPDATE notes SET created_at = \'' . $dateCreated . '\', updated_at = \'' . $dateUpdated . '\' ' .
-                                'WHERE id = ' . $insertedGitlabNote['id'] . ';' .
-                                PHP_EOL;
-
-                            $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
-
-                            break;
-                        }
-                        catch (\Exception $e)
-                        {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot comment issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
-
-                            try
-                            {
-                                $this->addProjectMember($gitlabAuthor);
-                            }
-                            catch (\Exception $e)
-                            {
-                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
-
-                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         file_put_contents(ROOT . '/sql/update-issues-' . $this->project['id'] . '.sql', $sqlUpdateIssues);
@@ -224,12 +140,57 @@ class IssueMigrator extends BaseMigrator
         $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
     }
 
-    private function addProjectMember($user)
+    /**
+     * Fetch all Github issue comments and add Gitlab notes.
+     *
+     * @param integer $githubIssueNumber
+     * @param integer $gitlabIssueId
+     * @throws \Exception
+     */
+    protected function addNotesFromIssue($githubIssueNumber, $gitlabIssueId)
     {
         $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
 
-        $this->gitlabClient->projects->addMember($this->project['id'], $user['id'], 30);
+        $githubIssueComments = $this->githubClient->issue()->comments()->all($this->organization, $this->project['name'], $githubIssueNumber, 1, 1000);
 
-        $this->gitlabClient->authenticate($user['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+        foreach($githubIssueComments as $githubIssueComment)
+        {
+            $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
+
+            $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
+
+            if (!$this->dry)
+            {
+                $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
+                while(true)
+                {
+                    try
+                    {
+                        $insertedGitlabNote = $this->gitlabClient->issues->addComment($this->project['id'], $gitlabIssueId, $githubIssueComment['body']);
+
+                        /**
+                         * Date time
+                         */
+                        $dateCreated = $githubIssueComment['created_at'];
+                        $dateUpdated = $githubIssueComment['updated_at'];
+
+                        $this->sqlUpdate .= 'UPDATE notes SET created_at = \'' . $dateCreated . '\', updated_at = \'' . $dateUpdated . '\' ' .
+                            'WHERE id = ' . $insertedGitlabNote['id'] . ';' .
+                            PHP_EOL;
+
+                        $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
+
+                        break;
+                    }
+                    catch (\Exception $e)
+                    {
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot comment issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+
+                        $this->addProjectMember($gitlabAuthor);
+                    }
+                }
+            }
+        }
     }
 }

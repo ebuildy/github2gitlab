@@ -3,189 +3,163 @@
 namespace ebuildy\github2gitlab\migrator;
 
 
-class PRMigrator extends BaseMigrator
+class PRMigrator extends BaseProjectAwareMigrator
 {
-    /**
-     * @var array
-     */
-    private $project;
-
-    public function __construct($project)
-    {
-        parent::__construct();
-
-        $this->project  = $project;
-    }
-
     public function run($dry = true)
     {
         $this->dry = $dry;
 
         $githubProjectPRs    = $this->githubClient->pullRequests()->all($this->organization, $this->project['name'], [
-            'state' => 'all'
+            'state'     => 'all',
+            'per_page'  => 500
         ]);
+
+        usort($githubProjectPRs, function($a, $b)
+        {
+            return $a['id'] - $b['id'];
+        });
 
         $this->output("\t" . "Found " . count($githubProjectPRs) . " PR");
 
-        foreach($githubProjectPRs as $githubProjectIssue)
+        foreach($githubProjectPRs as $githubPR)
         {
-            $gitlabMilestoneId = null;
-
-            if ($githubProjectIssue['milestone'] !== null)
+            if (!isset($githubPR['pull_request']) || empty($githubPR['pull_request']))
             {
-                $gitlabMilestoneId = $this->createMilestone($githubProjectIssue['milestone'], $this->project);
-            }
-
-            if (!isset($githubProjectIssue['pull_request']) || empty($githubProjectIssue['pull_request']))
-            {
-                $this->output("\t" . '[PR] Create "' . $githubProjectIssue['title'] . '"');
+                $this->output("\t" . '[PR] Create "' . $githubPR['title'] . '"');
 
                 if (!$dry)
                 {
-                    $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['user']);
-                    $gitlabAssignee         = empty($githubProjectIssue['assignee']) ? null : $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectIssue['assignee']);
-                    $insertedGitlabIssue    = null;
+                    $gitlabMR  = $this->insertMergeRequest($githubPR);
 
-                    $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
-
-                    while (empty($insertedGitlabIssue))
-                    {
-                        try
-                        {
-                            $insertedGitlabIssue = $this->gitlabClient->merge_requests->create(
-                                $this->project['id'],
-                                $githubProjectIssue['head']['ref'],
-                                $githubProjectIssue['base']['ref'],
-                                $githubProjectIssue['title'],
-                                empty($gitlabAssignee) ? null : $gitlabAssignee['id'],
-                                $this->project['id'],
-                                $githubProjectIssue['body']
-                            );
-
-                            $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
-                        }
-                        catch (\Exception $e)
-                        {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot create MR, adding ' . $gitlabAuthor['name'] . ' as a project member',
-                                self::OUTPUT_ERROR);
-
-                            if (strpos($e->getMessage(), 'This merge request already exists') !== false)
-                            {
-                                break;
-                            }
-
-                            try
-                            {
-                                $this->addProjectMember($gitlabAuthor);
-                            }
-                            catch (\Exception $e)
-                            {
-                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
-                                    self::OUTPUT_ERROR);
-
-                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-                            }
-                        }
-                    }
-/*
-                    if ($githubProjectIssue['state'] !== 'open')
-                    {
-                        while (true)
-                        {
-                            try
-                            {
-                                $this->output("\t" . 'Closing issue');
-
-                                $this->gitlabClient->issues->update($this->project['id'], $insertedGitlabIssue['id'], [
-                                    'state_event' => 'close'
-                                ]);
-
-                                $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
-
-                                break;
-                            }
-                            catch (\Exception $e)
-                            {
-                                $this->output("\t" . '"' . $e->getMessage() . '" cannot update PR, adding ' . $gitlabAuthor['name'] . ' as a project member',
-                                    self::OUTPUT_ERROR);
-
-                                try
-                                {
-                                    $this->addProjectMember($gitlabAuthor);
-                                }
-                                catch (\Exception $e)
-                                {
-                                    $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...',
-                                        self::OUTPUT_ERROR);
-
-                                    $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN,
-                                        \Gitlab\Client::AUTH_URL_TOKEN);
-                                }
-                            }
-                        }
-                    }
-*/
+                    $this->addComments($githubPR['number'], $gitlabMR['id']);
                 }
             }
 
             $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+        }
 
-            $githubIssueComments = $this->githubClient->pullRequest()->comments()->all($this->organization, $this->project['name'], $githubProjectIssue['number'], 1, 1000);
+        file_put_contents(ROOT . '/sql/update-mr-' . $this->project['id'] . '.sql', $this->sqlUpdate);
 
-            foreach($githubIssueComments as $githubIssueComment)
+        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+    }
+
+
+    /**
+     * @param $githubPR
+     * @return mixed|null
+     */
+    private function insertMergeRequest($githubPR)
+    {
+        $gitlabMR = null;
+
+        $gitlabAuthor   = $this->dic->userMigrator->getGitlabUserFromGithub($githubPR['user']);
+        $gitlabAssignee = empty($githubPR['assignee']) ? null : $this->dic->userMigrator->getGitlabUserFromGithub($githubPR['assignee']);
+
+        $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
+        while (empty($gitlabMR))
+        {
+            try
             {
-                $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
+                $gitlabMR = $this->gitlabClient->merge_requests->create(
+                    $this->project['id'],
+                    $githubPR['head']['ref'],
+                    $githubPR['base']['ref'],
+                    $githubPR['title'],
+                    empty($gitlabAssignee) ? null : $gitlabAssignee['id'],
+                    $this->project['id'],
+                    $githubPR['body']
+                );
 
-                $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
+                /**
+                 * Date time
+                 */
+                $dateCreated = $githubPR['created_at'];
+                $dateUpdated = $githubPR['updated_at'];
 
-                if (!$dry)
+                $this->sqlUpdate .= 'UPDATE merge_issues SET created_at=\'' . $dateCreated . '\',updated_at=\'' . $dateUpdated . '\',';
+
+                $this->sqlUpdate .= 'iid=' . $githubPR['number'];
+
+                if ($githubPR['milestone'] !== null)
                 {
-                    $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+                    $gitlabMilestoneId = $this->createMilestone($githubPR['milestone'], $this->project);
 
-                    while(true)
+                    $this->sqlUpdate .= ',milestone_id=' . $gitlabMilestoneId;
+                }
+
+                if ($githubPR['state'] !== 'open')
+                {
+                    $this->sqlUpdate .= ',state=\'closed\'';
+                }
+
+                $this->sqlUpdate .= ' WHERE id = ' . $gitlabMR['id'] . ';' . PHP_EOL;
+
+                $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
+            }
+            catch (\Exception $e)
+            {
+                $this->output("\t" . '"' . $e->getMessage() . '" cannot create MR, adding ' . $gitlabAuthor['name'] . ' as a project member',
+                    self::OUTPUT_ERROR);
+
+                if (strpos($e->getMessage(), 'This merge request already exists') !== false)
+                {
+                    return null;
+                }
+
+                $this->addProjectMember($gitlabAuthor);
+            }
+        }
+
+        return $gitlabMR;
+    }
+
+    /**
+     * Fetch all Github issue comments and add Gitlab notes.
+     *
+     * @param integer $githubIssueNumber
+     * @param integer $gitlabMRId
+     * @throws \Exception
+     */
+    protected function addComments($githubIssueNumber, $gitlabMRId)
+    {
+        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
+
+        $githubIssueComments = $this->githubClient->issue()->comments()->all($this->organization, $this->project['name'], $githubIssueNumber, 1, 1000);
+
+        foreach($githubIssueComments as $githubIssueComment)
+        {
+            $gitlabAuthor           = $this->dic->userMigrator->getGitlabUserFromGithub($githubIssueComment['user']);
+
+            $this->output("\t" . 'Add ' . $gitlabAuthor['name'] . " comments", self::OUTPUT_SUCCESS);
+
+            if (!$this->dry)
+            {
+                $this->gitlabClient->authenticate($gitlabAuthor['token'], \Gitlab\Client::AUTH_URL_TOKEN);
+
+                while(true)
+                {
+                    try
                     {
-                        try
-                        {
-                            $this->gitlabClient->merge_requests->addComment($this->project['id'], $insertedGitlabIssue['id'], $githubIssueComment['body']);
+                        $this->gitlabClient->merge_requests->addComment($this->project['id'], $gitlabMRId, $githubIssueComment['body']);
 
-                            $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
+                        /**
+                         * @todo Cannot get inserted Note Id ;-(
+                         */
 
-                            break;
-                        }
-                        catch (\Exception $e)
-                        {
-                            $this->output("\t" . '"' . $e->getMessage() . '" cannot comment MR, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
+                        $this->output("\t" . 'Ok!', self::OUTPUT_SUCCESS);
 
-                            if (strpos($e->getMessage(), 'SSLRead') !== false)
-                            {
-                                break;
-                            }
+                        break;
+                    }
+                    catch (\Exception $e)
+                    {
+                        $this->output("\t" . '"' . $e->getMessage() . '" cannot comment issue, adding ' . $gitlabAuthor['name'] . ' as a project member' , self::OUTPUT_ERROR);
 
-                            try
-                            {
-                                $this->addProjectMember($gitlabAuthor);
-                            }
-                            catch (\Exception $e)
-                            {
-                                $this->output("\t" . '"' . $e->getMessage() . '" Already a project member , try as admin ...' , self::OUTPUT_ERROR);
-
-                                $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-                            }
-                        }
+                        $this->addProjectMember($gitlabAuthor);
                     }
                 }
             }
         }
-
-        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
     }
 
-    private function addProjectMember($user)
-    {
-        $this->gitlabClient->authenticate(GITLAB_ADMIN_TOKEN, \Gitlab\Client::AUTH_URL_TOKEN);
-
-        $this->gitlabClient->projects->addMember($this->project['id'], $user['id'], 30);
-
-        $this->gitlabClient->authenticate($user['token'], \Gitlab\Client::AUTH_URL_TOKEN);
-    }
 }

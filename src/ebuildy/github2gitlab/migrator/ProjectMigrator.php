@@ -35,6 +35,13 @@ class ProjectMigrator extends BaseMigrator
 
         $existingGitlabProject = $this->getGitlabProjectByName($githubProjectName);
 
+        if (!empty($existingGitlabProject))
+        {
+            $this->gitlabClient->projects->remove($existingGitlabProject['id']);
+
+            $existingGitlabProject = null;
+        }
+
         if (empty($existingGitlabProject))
         {
             $this->output('[project] Create project "' . $githubProjectName . '"', self::OUTPUT_SUCCESS);
@@ -58,35 +65,21 @@ class ProjectMigrator extends BaseMigrator
             $this->output('[project] Existing project "' . $githubProjectName . '"');
         }
 
-        $githubProjectCollaborators = $this->githubClient->repository()->collaborators()->all($this->organization, $githubProjectName);
-
-        foreach($githubProjectCollaborators as $githubProjectCollaborator)
+        if ($existingGitlabProject['has_wiki'])
         {
-            $gitlabUser = $this->dic->userMigrator->getGitlabUserFromGithub($githubProjectCollaborator, false);
-
-            $this->output("\t" . '[project] Add collaborator "' . $githubProjectCollaborator['login'] . '" to "' . $githubProjectName . '"');
-
-            if (!$dry)
-            {
-                try
-                {
-                    $this->gitlabClient->projects->addMember($existingGitlabProject['id'], $gitlabUser['id'], 30);
-                }
-                catch (\Exception $e)
-                {
-                    $this->output("\t" . "Already a project member " . $e->getMessage(), self::OUTPUT_ERROR);
-                }
-            }
+            (new ProjectWikiMigrator($existingGitlabProject))->run();
         }
 
-        (new LabelMigrator())->run($dry, $existingGitlabProject);
+        (new ProjectCollaboratorMigrator($existingGitlabProject))->run($dry);
+
+        (new ProjectLabelMigrator($existingGitlabProject))->run($dry);
 
         if ($existingGitlabProject['issues_enabled'])
         {
-            (new IssueMigrator($existingGitlabProject))->run($dry);
+           (new IssueMigrator($existingGitlabProject))->run($dry);
         }
 
-        //(new PRMigrator($existingGitlabProject))->run($dry);
+        (new PRMigrator($existingGitlabProject))->run($dry);
     }
 
 }

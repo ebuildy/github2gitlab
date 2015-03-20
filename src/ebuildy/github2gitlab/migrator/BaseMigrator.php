@@ -4,7 +4,7 @@ namespace ebuildy\github2gitlab\migrator;
 
 use ebuildy\github2gitlab\DIC;
 
-class BaseMigrator
+abstract class BaseMigrator
 {
     /**
      * @var \Github\Client

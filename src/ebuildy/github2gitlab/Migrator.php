@@ -27,7 +27,7 @@ class Migrator extends BaseMigrator
         {
             list($_org, $githubProjectName) = explode('/', str_replace('https://github.com/', '', $githubProject['html_url']));
 
-            if ($githubProjectName !== 'admin')
+            if ($githubProjectName !== 'Admin')
             {
                 $projectMigrator->importProject($githubProject, $dry);
             }
